@@ -2,7 +2,7 @@ import re
 import html
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import List
 
 import streamlit as st
 import pandas as pd
@@ -24,8 +24,7 @@ def today_yyyymmdd() -> str:
 
 
 def normalize_spaces(s: str) -> str:
-    # rule: "단어: 값" 형태로 콜론 앞뒤 정리
-    s = re.sub(r"([가-힣A-Za-z0-9])\s*:\s*", r"\1: ", s)
+    s = re.sub(r"([가-힣A-Za-z0-9])\s*:\s*", r"\1: ", s)  # 콜론 한칸
     s = re.sub(r"[ \t]+\n", "\n", s)
     s = re.sub(r"\n{3,}", "\n\n", s).strip()
     return s
@@ -86,7 +85,6 @@ def ensure_30_hashtags(base: List[str], extra: List[str]) -> List[str]:
         add(t)
         if len(out) >= 30:
             break
-
     return out[:30]
 
 
@@ -97,7 +95,6 @@ def html_wrap(title: str, body_md_like: str) -> str:
 
     for line in lines:
         l = line.rstrip()
-
         if re.match(r"^\s*[-•]\s+", l):
             if not in_ul:
                 html_lines.append("<ul>")
@@ -171,10 +168,8 @@ def try_fetch_misharp_product(url: str, timeout: int = 10) -> ProductInfo:
             info.price = m.group(1) + "원"
 
         info.description_hint = text[:800]
-
     except Exception:
         pass
-
     return info
 
 
@@ -209,16 +204,16 @@ def build_misharp_prompt(
 1) 최상단 요약(3~5줄)
 2) 이런 분들께 추천합니다(4050 체형/TPO) - 리스팅
 3) 이럴 때 요긴해요 - 상황 리스팅
-4) (자연스러운 타이틀) 디자인/핏이 주는 이점: 체형커버, 날씬해 보임 등
-5) (자연스러운 타이틀) 소재/착용감이 주는 생활 속 이점: 구김, 편안함 등
-6) (자연스러운 타이틀) 가격/가치 베네핏: 퀄리티 대비 합리적
+4) (자연스러운 타이틀) 디자인/핏이 주는 이점
+5) (자연스러운 타이틀) 소재/착용감이 주는 생활 속 이점
+6) (자연스러운 타이틀) 가격/가치 베네핏
 7) 고객 후기 반응 요약: 후기 텍스트가 비어 있으면 이 문단은 아예 쓰지 말 것
 8) 활용성 및 코디 제안(TPO 연결)
 9) (자연스러운 타이틀) 이 아이템, 꼭 만나보세요(공감 CTA)
-10) 아이템 사이즈 스펙 표(표 형태)
-11) 사이즈 추천 표(체형별 추천)
+10) 아이템 사이즈 스펙 표
+11) 사이즈 추천 표(체형별)
 12) 최하단 [요약] 3줄
-13) 요약 다음 줄에 인용박스(>)로 필요성 공감 CTA
+13) 요약 다음 줄에 인용박스(>) CTA
 14) 마지막 줄: "일상도 스타일도 미샵처럼, 심플하게! MISHARP"
 15) 해시태그 30개(필수 포함)
 
@@ -258,7 +253,7 @@ def build_general_prompt(platform: str, topic: str, keywords: List[str], notes: 
 - 본문(문단별 소제목으로 구조화)
 - 마지막 요약(3줄)
 - 해시태그 30개(한 줄)
-- 마지막 인사: "오늘 정보가 도움이 되었으면 합니다." 느낌의 창작 인사말
+- 마지막 인사: 오늘 정보가 도움이 되었으면 한다는 의미의 인삿말(창작)
 
 [입력 메모]
 {notes}
@@ -283,366 +278,326 @@ def call_openai(prompt: str) -> str:
 
 
 # =========================
-# Page / Theme
+# Page
 # =========================
-st.set_page_config(
-    page_title="미샵 블로그 콘텐츠 생성기",
-    page_icon="📝",
-    layout="wide"
-)
+st.set_page_config(page_title="미샵 블로그 콘텐츠 생성기", page_icon="📝", layout="wide")
 
-# UI polish CSS (dark/light 모두 예쁘게)
+# ✅ 카드 HTML(div) 제거하고 container(border=True)에 CSS만 입힘
 st.markdown(
     """
 <style>
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
-html, body, [class*="css"]  {
-  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif !important;
+html, body, [class*="css"]{
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic", sans-serif !important;
 }
 
-.block-container { 
-  padding-top: 1.4rem !important; 
-  padding-bottom: 3rem !important; 
+.block-container{
+  padding-top: 1.4rem !important;
+  padding-bottom: 3rem !important;
   max-width: 1220px;
 }
 
-:root {
+/* 카드 톤(다크/라이트 자동 대응) */
+:root{
   --card-bg: rgba(255,255,255,0.06);
   --card-border: rgba(255,255,255,0.10);
   --card-shadow: 0 12px 30px rgba(0,0,0,0.18);
   --muted: rgba(255,255,255,0.65);
   --muted2: rgba(255,255,255,0.55);
+  --badge-bg: rgba(255,255,255,0.08);
+  --badge-border: rgba(255,255,255,0.10);
 }
-
-@media (prefers-color-scheme: light) {
-  :root {
+@media (prefers-color-scheme: light){
+  :root{
     --card-bg: rgba(0,0,0,0.03);
     --card-border: rgba(0,0,0,0.08);
     --card-shadow: 0 12px 30px rgba(0,0,0,0.06);
     --muted: rgba(0,0,0,0.62);
     --muted2: rgba(0,0,0,0.52);
+    --badge-bg: rgba(0,0,0,0.03);
+    --badge-border: rgba(0,0,0,0.07);
   }
 }
 
-.app-title {
-  font-size: 1.6rem;
-  font-weight: 850;
-  letter-spacing: -0.02em;
-  margin: 0.1rem 0 0.35rem 0;
+/* ✅ container(border=True) 카드 스타일링 */
+div[data-testid="stVerticalBlockBorderWrapper"]{
+  background: var(--card-bg) !important;
+  border: 1px solid var(--card-border) !important;
+  border-radius: 18px !important;
+  box-shadow: var(--card-shadow) !important;
+  padding: 18px 18px !important;
+  margin-bottom: 16px !important;
 }
 
-.app-sub {
+/* 제목/부제 */
+.app-title{
+  font-size: 1.65rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin: 0.1rem 0 0.3rem 0;
+}
+.app-sub{
   font-size: 1.0rem;
   color: var(--muted);
+  line-height: 1.6;
   margin-bottom: 1.1rem;
-  line-height: 1.55;
 }
 
-.card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 18px;
-  padding: 18px 18px;
-  box-shadow: var(--card-shadow);
-}
-
-.card + .card { margin-top: 16px; }
-
-.step-head {
+/* 섹션 헤더 */
+.step-head{
   display:flex; align-items:center; justify-content:space-between;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 10px; margin-bottom: 10px;
 }
-.step-title {
+.step-title{
   font-size: 1.15rem;
-  font-weight: 800;
+  font-weight: 850;
   letter-spacing: -0.01em;
   margin: 0;
 }
-.step-badge {
+.step-badge{
   font-size: 0.86rem;
   padding: 5px 10px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.10);
+  background: var(--badge-bg);
+  border: 1px solid var(--badge-border);
 }
-@media (prefers-color-scheme: light) {
-  .step-badge { 
-    background: rgba(0,0,0,0.03); 
-    border: 1px solid rgba(0,0,0,0.07);
-  }
-}
-
-.help {
+.help{
   color: var(--muted2);
   font-size: 0.93rem;
   line-height: 1.55;
   margin-top: 6px;
 }
 
-hr { 
-  margin: 12px 0 14px 0;
-  border: none;
-  height: 1px;
-  background: rgba(255,255,255,0.10);
-}
-@media (prefers-color-scheme: light) {
-  hr { background: rgba(0,0,0,0.08); }
+/* 버튼 통일감 */
+.stButton>button, .stDownloadButton>button{
+  border-radius: 14px !important;
+  padding: 0.75rem 1rem !important;
+  font-weight: 750 !important;
 }
 
-/* 버튼/입력폭/라벨 느낌 개선 */
-.stButton>button {
-  border-radius: 14px !important;
-  padding: 0.75rem 1rem !important;
-  font-weight: 700 !important;
-}
-.stDownloadButton>button {
-  border-radius: 14px !important;
-  padding: 0.75rem 1rem !important;
-  font-weight: 700 !important;
-}
-label, .stMarkdown, .stCaption { letter-spacing: -0.01em; }
+/* 입력 라벨 가독성 */
+label{ letter-spacing: -0.01em; }
 </style>
 """,
     unsafe_allow_html=True
 )
 
-# ✅ 제목이 안 보이던 문제: st.title + st.caption(테마 자동 대응) + 보조 HTML 타이틀
+# ✅ 제목은 Streamlit 기본 + 보조 문구(항상 보이게)
 st.title("📝 미샵 블로그 콘텐츠 생성기")
 st.caption("블로그 선택 → 주제/URL 입력 → 글 생성(TXT/HTML/복사) → 이미지/발행 → 카피라이트")
 
-# =========================
-# Main Layout
-# =========================
 left, right = st.columns([1.05, 1.0], gap="large")
 
 with left:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="step-head">
-          <div class="step-title">1) 블로그 선택</div>
-          <div class="step-badge">STEP 1</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    with st.container(border=True):
+        st.markdown(
+            """
+            <div class="step-head">
+              <div class="step-title">1) 블로그 선택</div>
+              <div class="step-badge">STEP 1</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        platform = st.radio(
+            "플랫폼",
+            ["네이버(네이버 SEO)", "티스토리(다음/카카오 SEO)", "블로거(구글 SEO)"],
+            horizontal=True
+        )
+        st.markdown('<div class="help">원하는 검색 채널(네이버/다음/구글)에 맞춰 제목·본문·해시태그 흐름이 자동 최적화됩니다.</div>', unsafe_allow_html=True)
 
-    platform = st.radio(
-        "플랫폼",
-        ["네이버(네이버 SEO)", "티스토리(다음/카카오 SEO)", "블로거(구글 SEO)"],
-        horizontal=True
-    )
-    st.markdown('<div class="help">원하는 검색 채널(네이버/다음/구글)에 맞춰 제목·본문·해시태그 흐름이 자동 최적화됩니다.</div>', unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown(
+            """
+            <div class="step-head">
+              <div class="step-title">2) 주제 입력</div>
+              <div class="step-badge">STEP 2</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        post_type = st.selectbox("글 유형", ["미샵 패션 아이템 글", "기타 주제 글"])
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="step-head">
-          <div class="step-title">2) 주제 입력</div>
-          <div class="step-badge">STEP 2</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        c1, c2 = st.columns([1, 1], gap="small")
+        with c1:
+            product_url = st.text_input("상품 URL (선택)", placeholder="https://misharp.co.kr/product/detail.html?product_no=...")
+        with c2:
+            topic_text = st.text_input("주제/상품명 (필수)", placeholder="예) 소울 하이넥 반목 니트 / 40대 출근룩 코디")
 
-    post_type = st.selectbox("글 유형", ["미샵 패션 아이템 글", "기타 주제 글"])
+        kw_csv = st.text_input("키워드 (','로 구분)", placeholder="예) 40대여성의류, 50대여성의류, 출근룩, 데일리룩, 체형커버")
+        keywords = keywords_from_csv(kw_csv)
 
-    c1, c2 = st.columns([1, 1], gap="small")
-    with c1:
-        product_url = st.text_input("상품 URL (선택)", placeholder="https://misharp.co.kr/product/detail.html?product_no=...")
-    with c2:
-        topic_text = st.text_input("주제/상품명 (필수)", placeholder="예) 소울 하이넥 반목 니트 / 40대 출근룩 코디")
+        notes = st.text_area(
+            "내용 입력 (글자수 제한 없음 / 상세설명·원고·메모 붙여넣기)",
+            height=220,
+            placeholder="여기에 미샵 상세페이지 원고, 소재/핏/추천상황, 고객 FAQ 등 원하는 재료를 넣어주세요."
+        )
+        st.markdown('<div class="help">TIP) URL 자동 추출은 실패할 수 있어요. 중요한 원고는 위 입력칸에 붙여넣는 방식이 가장 안정적입니다.</div>', unsafe_allow_html=True)
 
-    kw_csv = st.text_input("키워드 (','로 구분)", placeholder="예) 40대여성의류, 50대여성의류, 출근룩, 데일리룩, 체형커버")
-    keywords = keywords_from_csv(kw_csv)
-
-    notes = st.text_area(
-        "내용 입력 (글자수 제한 없음 / 상세설명·원고·메모 붙여넣기)",
-        height=220,
-        placeholder="여기에 미샵 상세페이지 원고, 소재/핏/추천상황, 고객 FAQ 등 원하는 재료를 넣어주세요."
-    )
-    st.markdown('<div class="help">TIP) URL 자동 추출은 실패할 수 있어요. 중요한 원고는 위 입력칸에 붙여넣는 방식이 가장 안정적입니다.</div>', unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="step-head">
-          <div class="step-title">3) (선택) 사이즈 / 후기 입력</div>
-          <div class="step-badge">STEP 3</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    st.markdown('<div class="help">후기가 비어 있으면 “후기 요약 문단”은 자동으로 제외됩니다.</div>', unsafe_allow_html=True)
-
-    size_spec_text = st.text_area("사이즈 스펙(표 재료)", height=120, placeholder="예) 어깨 38 / 가슴 100 / 총장 60 ...")
-    reviews_text = st.text_area("후기 텍스트(있으면 붙여넣기)", height=120, placeholder="후기 여러 개를 붙여넣으면 요약합니다. 없으면 비워두세요.")
-    st.markdown("</div>", unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown(
+            """
+            <div class="step-head">
+              <div class="step-title">3) (선택) 사이즈 / 후기 입력</div>
+              <div class="step-badge">STEP 3</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        st.markdown('<div class="help">후기가 비어 있으면 “후기 요약 문단”은 자동으로 제외됩니다.</div>', unsafe_allow_html=True)
+        size_spec_text = st.text_area("사이즈 스펙(표 재료)", height=120, placeholder="예) 어깨 38 / 가슴 100 / 총장 60 ...")
+        reviews_text = st.text_area("후기 텍스트(있으면 붙여넣기)", height=120, placeholder="후기 여러 개를 붙여넣으면 요약합니다. 없으면 비워두세요.")
 
 with right:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="step-head">
-          <div class="step-title">4) 글 생성</div>
-          <div class="step-badge">STEP 4</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    with st.container(border=True):
+        st.markdown(
+            """
+            <div class="step-head">
+              <div class="step-title">4) 글 생성</div>
+              <div class="step-badge">STEP 4</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        st.write(f"플랫폼: **{platform}**  ·  유형: **{post_type}**  ·  날짜: **{today_yyyymmdd()}**")
 
-    # 상단 요약 표시(직관)
-    st.write(f"플랫폼: **{platform}**  ·  유형: **{post_type}**  ·  날짜: **{today_yyyymmdd()}**")
+        fetch_btn = st.button("🔎 (선택) URL에서 상품명 자동 추출", use_container_width=True)
+        if fetch_btn and product_url.strip():
+            info = try_fetch_misharp_product(product_url.strip())
+            if info.name:
+                st.success(f"추출된 상품명: {info.name}")
+                if not topic_text.strip():
+                    st.session_state["topic_autofill"] = info.name
+            else:
+                st.warning("자동 추출이 실패했어요. 주제/상품명 칸에 직접 입력하는 게 가장 안전합니다.")
 
-    fetch_btn = st.button("🔎 (선택) URL에서 상품명 자동 추출", use_container_width=True)
-    if fetch_btn and product_url.strip():
-        info = try_fetch_misharp_product(product_url.strip())
-        if info.name:
-            st.success(f"추출된 상품명: {info.name}")
+        if "topic_autofill" in st.session_state and not topic_text.strip():
+            topic_text = st.session_state["topic_autofill"]
+
+        generate_btn = st.button("✨ 글 생성하기", type="primary", use_container_width=True)
+
+        if generate_btn:
             if not topic_text.strip():
-                st.session_state["topic_autofill"] = info.name
-        else:
-            st.warning("자동 추출이 실패했어요. 주제/상품명 칸에 직접 입력하는 게 가장 안전합니다.")
+                st.error("주제/상품명(필수)을 입력해주세요.")
+            else:
+                with st.spinner("글 생성 중..."):
+                    primary_kw = keywords[0] if keywords else (topic_text.strip().split()[0] if topic_text.strip() else "여성의류")
 
-    if "topic_autofill" in st.session_state and not topic_text.strip():
-        topic_text = st.session_state["topic_autofill"]
+                    if post_type == "미샵 패션 아이템 글":
+                        prompt = build_misharp_prompt(
+                            platform=platform,
+                            product_name=topic_text.strip(),
+                            primary_kw=primary_kw,
+                            keywords=keywords,
+                            user_notes=notes.strip(),
+                            product_url=product_url.strip(),
+                            size_spec_text=size_spec_text.strip(),
+                            reviews_text=reviews_text.strip(),
+                        )
+                    else:
+                        prompt = build_general_prompt(
+                            platform=platform,
+                            topic=topic_text.strip(),
+                            keywords=keywords,
+                            notes=notes.strip()
+                        )
 
-    generate_btn = st.button("✨ 글 생성하기", type="primary", use_container_width=True)
+                    out_text = call_openai(prompt)
+                    out_text = normalize_spaces(out_text)
 
-    if generate_btn:
-        if not topic_text.strip():
-            st.error("주제/상품명(필수)을 입력해주세요.")
-        else:
-            with st.spinner("글 생성 중..."):
-                primary_kw = keywords[0] if keywords else (topic_text.strip().split()[0] if topic_text.strip() else "여성의류")
+                    # 해시태그 30개 확정
+                    if post_type == "미샵 패션 아이템 글":
+                        required = ["#미샵", "#여성의류", "#출근룩", "#데일리룩", "#ootd", "#40대여성의류", "#50대여성의류", "#중년여성패션"]
+                    else:
+                        required = []
 
-                if post_type == "미샵 패션 아이템 글":
-                    prompt = build_misharp_prompt(
-                        platform=platform,
-                        product_name=topic_text.strip(),
-                        primary_kw=primary_kw,
-                        keywords=keywords,
-                        user_notes=notes.strip(),
-                        product_url=product_url.strip(),
-                        size_spec_text=size_spec_text.strip(),
-                        reviews_text=reviews_text.strip(),
+                    extra = []
+                    for k in keywords[:25]:
+                        extra.append("#" + re.sub(r"\s+", "", k))
+                    tags = ensure_30_hashtags(required, extra)
+
+                    out_text_wo_tags = re.sub(r"(#\S+\s*){8,}$", "", out_text, flags=re.MULTILINE).rstrip()
+                    out_text = out_text_wo_tags + "\n\n" + " ".join(tags)
+
+                    title_guess = out_text.splitlines()[0].strip() if out_text.splitlines() else topic_text.strip()
+
+                    st.session_state["generated_text"] = out_text
+                    st.session_state["generated_title"] = title_guess
+                    st.session_state["copyright_kr"] = (
+                        "ⓒ 미샵컴퍼니(MISHARP COMPANY). 본 콘텐츠의 저작권은 미샵컴퍼니에 있으며, "
+                        "무단 복제·배포·전재·2차 가공 및 상업적 이용을 금합니다."
                     )
-                else:
-                    prompt = build_general_prompt(
-                        platform=platform,
-                        topic=topic_text.strip(),
-                        keywords=keywords,
-                        notes=notes.strip()
+                    st.session_state["copyright_en"] = (
+                        "ⓒ MISHARP COMPANY. All rights reserved. Unauthorized copying, redistribution, "
+                        "republication, modification, or commercial use is strictly prohibited."
                     )
 
-                out_text = call_openai(prompt)
-                out_text = normalize_spaces(out_text)
+                st.success("생성 완료! 아래에서 TXT/HTML/복사로 바로 사용하세요.")
 
-                # 해시태그 30개 확정 (미샵 글은 필수 태그 포함)
-                if post_type == "미샵 패션 아이템 글":
-                    required = ["#미샵", "#여성의류", "#출근룩", "#데일리룩", "#ootd", "#40대여성의류", "#50대여성의류", "#중년여성패션"]
-                else:
-                    required = []
+        if "generated_text" in st.session_state:
+            title_guess = st.session_state.get("generated_title", topic_text.strip())
+            content_text = st.session_state["generated_text"]
 
-                extra = []
-                for k in keywords[:25]:
-                    extra.append("#" + re.sub(r"\s+", "", k))
-                tags = ensure_30_hashtags(required, extra)
+            st.subheader("✅ 결과 (텍스트)")
+            st.text_area("생성된 글 (전체 선택 후 복사)", value=content_text, height=340)
 
-                # 마지막에 해시태그 줄 강제
-                out_text_wo_tags = re.sub(r"(#\S+\s*){8,}$", "", out_text, flags=re.MULTILINE).rstrip()
-                out_text = out_text_wo_tags + "\n\n" + " ".join(tags)
+            st.subheader("✅ HTML 소스")
+            html_doc = html_wrap(title_guess, content_text)
+            st.code(html_doc, language="html")
 
-                title_guess = out_text.splitlines()[0].strip() if out_text.splitlines() else topic_text.strip()
-
-                st.session_state["generated_text"] = out_text
-                st.session_state["generated_title"] = title_guess
-
-                st.session_state["copyright_kr"] = (
-                    "ⓒ 미샵컴퍼니(MISHARP COMPANY). 본 콘텐츠의 저작권은 미샵컴퍼니에 있으며, "
-                    "무단 복제·배포·전재·2차 가공 및 상업적 이용을 금합니다."
+            col_dl1, col_dl2 = st.columns(2, gap="small")
+            with col_dl1:
+                fname = f"{today_yyyymmdd()}_{safe_slug_10chars(title_guess)}.txt"
+                st.download_button(
+                    "⬇️ TXT 다운로드",
+                    data=(content_text + "\n\n" + st.session_state["copyright_kr"] + "\n" + st.session_state["copyright_en"]),
+                    file_name=fname,
+                    mime="text/plain",
+                    use_container_width=True
                 )
-                st.session_state["copyright_en"] = (
-                    "ⓒ MISHARP COMPANY. All rights reserved. Unauthorized copying, redistribution, "
-                    "republication, modification, or commercial use is strictly prohibited."
+            with col_dl2:
+                fname_html = f"{today_yyyymmdd()}_{safe_slug_10chars(title_guess)}.html"
+                st.download_button(
+                    "⬇️ HTML 다운로드",
+                    data=html_doc,
+                    file_name=fname_html,
+                    mime="text/html",
+                    use_container_width=True
                 )
 
-            st.success("생성 완료! 아래에서 TXT/HTML/복사로 바로 사용하세요.")
+            st.subheader("5) 카피라이트 고지 (한글/영문)")
+            st.write(st.session_state["copyright_kr"])
+            st.write(st.session_state["copyright_en"])
 
-    if "generated_text" in st.session_state:
-        title_guess = st.session_state.get("generated_title", topic_text.strip())
-        content_text = st.session_state["generated_text"]
+    with st.container(border=True):
+        st.markdown(
+            """
+            <div class="step-head">
+              <div class="step-title">6) 이미지 생성 / 발행 바로가기</div>
+              <div class="step-badge">STEP 6</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-        st.markdown("<hr/>", unsafe_allow_html=True)
-        st.subheader("✅ 결과 (텍스트)")
-        st.text_area("생성된 글 (전체 선택 후 복사)", value=content_text, height=340)
+        st.markdown("**미샵 상세페이지 이미지 추출기(자동 ZIP 생성):**")
+        st.link_button("🖼️ misharp-image-crop-v1 열기", "https://misharp-image-crop-v1.streamlit.app/", use_container_width=True)
 
-        st.subheader("✅ HTML 소스")
-        html_doc = html_wrap(title_guess, content_text)
-        st.code(html_doc, language="html")
+        st.markdown("**저작권 걱정 없는 이미지 소스:**")
+        p1, p2 = st.columns(2, gap="small")
+        with p1:
+            st.link_button("Pexels (무료)", "https://www.pexels.com/ko-kr/", use_container_width=True)
+        with p2:
+            st.link_button("Pixabay (무료)", "https://pixabay.com/ko/", use_container_width=True)
 
-        col_dl1, col_dl2 = st.columns(2, gap="small")
-        with col_dl1:
-            fname = f"{today_yyyymmdd()}_{safe_slug_10chars(title_guess)}.txt"
-            st.download_button(
-                "⬇️ TXT 다운로드",
-                data=(content_text + "\n\n" + st.session_state["copyright_kr"] + "\n" + st.session_state["copyright_en"]),
-                file_name=fname,
-                mime="text/plain",
-                use_container_width=True
-            )
-        with col_dl2:
-            fname_html = f"{today_yyyymmdd()}_{safe_slug_10chars(title_guess)}.html"
-            st.download_button(
-                "⬇️ HTML 다운로드",
-                data=html_doc,
-                file_name=fname_html,
-                mime="text/html",
-                use_container_width=True
-            )
+        st.markdown("**발행 로그인 링크:**")
+        b1, b2, b3 = st.columns(3, gap="small")
+        with b1:
+            st.link_button("네이버 블로그 로그인", "https://nid.naver.com/nidlogin.login", use_container_width=True)
+        with b2:
+            st.link_button("티스토리 로그인", "https://www.tistory.com/auth/login", use_container_width=True)
+        with b3:
+            st.link_button("Blogger 로그인", "https://accounts.google.com/signin/v2/identifier?service=blogger", use_container_width=True)
 
-        st.subheader("5) 카피라이트 고지 (한글/영문)")
-        st.write(st.session_state["copyright_kr"])
-        st.write(st.session_state["copyright_en"])
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="step-head">
-          <div class="step-title">6) 이미지 생성 / 발행 바로가기</div>
-          <div class="step-badge">STEP 6</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.markdown("**미샵 상세페이지 이미지 추출기(자동 ZIP 생성):**")
-    st.link_button("🖼️ misharp-image-crop-v1 열기", "https://misharp-image-crop-v1.streamlit.app/", use_container_width=True)
-
-    st.markdown("<br/>", unsafe_allow_html=True)
-    st.markdown("**저작권 걱정 없는 이미지 소스:**")
-    p1, p2 = st.columns(2, gap="small")
-    with p1:
-        st.link_button("Pexels (무료)", "https://www.pexels.com/ko-kr/", use_container_width=True)
-    with p2:
-        st.link_button("Pixabay (무료)", "https://pixabay.com/ko/", use_container_width=True)
-
-    st.markdown("<br/>", unsafe_allow_html=True)
-    st.markdown("**발행 로그인 링크:**")
-    b1, b2, b3 = st.columns(3, gap="small")
-    with b1:
-        st.link_button("네이버 블로그 로그인", "https://nid.naver.com/nidlogin.login", use_container_width=True)
-    with b2:
-        st.link_button("티스토리 로그인", "https://www.tistory.com/auth/login", use_container_width=True)
-    with b3:
-        st.link_button("Blogger 로그인", "https://accounts.google.com/signin/v2/identifier?service=blogger", use_container_width=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-st.caption("※ UI는 Pretendard 폰트 + 카드형 단계 구성으로 다듬었고, 제목은 Streamlit 기본 타이틀로 항상 보이게 고정했습니다.")
+st.caption("※ 단계별 ‘빈 박스’는 HTML 카드(div) 분리 렌더링 때문에 생긴 현상이라, container(border=True) 기반으로 구조를 바꿔 완전히 제거했습니다.")
