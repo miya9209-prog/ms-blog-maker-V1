@@ -542,7 +542,7 @@ with right:
 
     # Step 5: 항상 표시 (예전처럼 “비어있음” 방지)
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="step-title">5) 결과 / TXT · HTML / 복사</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-title">4) 결과 / TXT · HTML / 복사</div>', unsafe_allow_html=True)
 
     if "generated_text" not in st.session_state:
         st.info("아직 생성된 글이 없습니다. 위에서 **3) 글 생성하기**를 눌러주세요.")
@@ -570,7 +570,7 @@ with right:
 
     # Step 3/4: 이미지/발행 링크 (목업 유지)
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="step-title">3) 이미지 생성</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-title">5) 이미지 생성</div>', unsafe_allow_html=True)
     st.link_button("🖼️ 미샵 상세페이지 이미지 추출기(자동 ZIP)", "https://misharp-image-crop-v1.streamlit.app/", use_container_width=True)
 
     c1, c2 = st.columns(2)
@@ -582,7 +582,7 @@ with right:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="step-title">4) 발행하기</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-title">6) 발행하기</div>', unsafe_allow_html=True)
 
     b1, b2, b3 = st.columns(3)
     with b1:
