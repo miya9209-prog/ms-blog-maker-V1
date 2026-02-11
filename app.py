@@ -589,7 +589,7 @@ with right:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<div class="step-title">3) 글 생성</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="hint">생성 후 5)에서 <b>네이버용 HTML 복사 버튼</b>을 사용하면 ChatGPT처럼 표가 유지됩니다.</div>',
+        '<div class="hint">생성 후 4)에서 <b>네이버용 HTML 복사 버튼</b>을 사용하면 ChatGPT처럼 표가 유지됩니다.</div>',
         unsafe_allow_html=True,
     )
 
@@ -647,9 +647,9 @@ with right:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # 5) Result (KEY)
+    # 4) Result (KEY)
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="step-title">5) 결과 / 복사 / 다운로드</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-title">4) 결과 / 복사 / 다운로드</div>', unsafe_allow_html=True)
 
     if "generated_md" not in st.session_state:
         st.info("아직 생성된 글이 없습니다. 위에서 **3) 글 생성하기**를 눌러주세요.")
@@ -696,9 +696,9 @@ ChatGPT 복사처럼 **표가 살아있는 상태로 붙습니다.**
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # 6) Image / Publish shortcuts
+    # 5) Image / Publish shortcuts
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="step-title">6) 이미지 생성 / 발행 바로가기</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-title">5) 이미지 생성 / 발행 바로가기</div>', unsafe_allow_html=True)
     st.link_button("🖼️ 미샵 상세페이지 이미지 추출기(자동 ZIP)", "https://misharp-image-crop-v1.streamlit.app/", use_container_width=True)
 
     c1, c2 = st.columns(2)
