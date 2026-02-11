@@ -1,27 +1,26 @@
 import re
 import html
-from dataclasses import dataclass
 from datetime import datetime
 from typing import List
 
 import streamlit as st
-import requests
-from bs4 import BeautifulSoup
 
+# Optional: OpenAI
 try:
     from openai import OpenAI
 except Exception:
     OpenAI = None
 
 
-# -------------------------
-# Utilities
-# -------------------------
+# =========================
+# Helpers
+# =========================
 def today_yyyymmdd() -> str:
     return datetime.now().strftime("%Y%m%d")
 
 
 def normalize_spaces(s: str) -> str:
+    # "단어: 값" 콜론 한칸 띄우기
     s = re.sub(r"([가-힣A-Za-z0-9])\s*:\s*", r"\1: ", s)
     s = re.sub(r"[ \t]+\n", "\n", s)
     s = re.sub(r"\n{3,}", "\n\n", s).strip()
@@ -87,12 +86,15 @@ def ensure_30_hashtags(base: List[str], extra: List[str]) -> List[str]:
 
 
 def html_wrap(title: str, body_text: str) -> str:
+    # 간단 HTML 래핑 (블로그 붙여넣기용)
     lines = body_text.splitlines()
     html_lines = []
     in_ul = False
 
     for line in lines:
         l = line.rstrip()
+
+        # 리스트(- 또는 •)
         if re.match(r"^\s*[-•]\s+", l):
             if not in_ul:
                 html_lines.append("<ul>")
@@ -127,15 +129,16 @@ def html_wrap(title: str, body_text: str) -> str:
 """
 
 
-# -------------------------
+# =========================
 # OpenAI
-# -------------------------
+# =========================
 def call_openai(prompt: str) -> str:
-    api_key = st.secrets.get("OPENAI_API_KEY", "") if hasattr(st, "secrets") else ""
-    model = st.secrets.get("OPENAI_MODEL", "gpt-5") if hasattr(st, "secrets") else "gpt-5"
+    api_key = ""
+    model = "gpt-5"
 
-    api_key = str(api_key).strip()
-    model = str(model).strip()
+    if hasattr(st, "secrets"):
+        api_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
+        model = str(st.secrets.get("OPENAI_MODEL", "gpt-5")).strip()
 
     if not api_key or OpenAI is None:
         return "(테스트 모드) OpenAI 키가 없어 규칙 기반 임시 출력입니다.\n\n" + prompt[:1800]
@@ -145,11 +148,19 @@ def call_openai(prompt: str) -> str:
     return resp.output_text
 
 
-# -------------------------
+# =========================
 # Prompts
-# -------------------------
-def build_misharp_prompt(platform: str, product_name: str, primary_kw: str, keywords: List[str],
-                        user_notes: str, product_url: str, size_spec_text: str, reviews_text: str) -> str:
+# =========================
+def build_misharp_prompt(
+    platform: str,
+    product_name: str,
+    primary_kw: str,
+    keywords: List[str],
+    user_notes: str,
+    product_url: str,
+    size_spec_text: str,
+    reviews_text: str,
+) -> str:
     kws_joined = ", ".join(keywords) if keywords else ""
     return f"""
 너는 20년차 여성의류 쇼핑몰 CEO(미샵 대표)이며, 네이버/다음/구글 SEO에 강한 블로그 작가다.
@@ -159,7 +170,7 @@ def build_misharp_prompt(platform: str, product_name: str, primary_kw: str, keyw
 [절대 규칙]
 - 첫 문장은 반드시 아래 그대로 시작:
 "안녕하세요^^ 일상도 스타일도 미샵처럼 심플하게! 20년차 여성의류 쇼핑몰 미샵 대표입니다."
-- 그 다음 문장에는 '시즌/날씨/시기' 인사말을 자연스럽게 추가.
+- 그 다음 문장에는 시즌/날씨/시기 인사말을 자연스럽게 추가.
 - 각 문단의 시작은 반드시 "미샵 {product_name}은(는) " 으로 시작.
 - 문단 사이 구분선(--- 등) 금지. 대신 공감 유도 연결문장으로 자연스럽게 이어가라.
 - 콜론 표기 시 "단어: 값"으로 한 칸 띄어쓰기.
@@ -237,27 +248,38 @@ def build_general_prompt(platform: str, topic: str, keywords: List[str], notes: 
 # =========================
 st.set_page_config(page_title="미샵 블로그 콘텐츠 생성기", page_icon="📝", layout="wide")
 
-# 기본 스타일(가벼운 정돈)
 st.markdown(
     """
     <style>
-    .block-container { padding-top: 2.2rem; padding-bottom: 2.8rem; }
-    h1 { font-size: 2.2rem !important; }
-    .step-badge { font-size: 0.75rem; opacity: 0.85; }
+      .block-container { padding-top: 2.0rem; padding-bottom: 2.4rem; }
+      h1 { font-size: 2.2rem !important; }
+      .misharp-footer {
+        margin-top: 56px;
+        padding-top: 18px;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        font-size: 0.78rem;
+        line-height: 1.55;
+        color: rgba(255,255,255,0.45);
+        text-align: center;
+      }
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 st.title("📝 미샵 블로그 콘텐츠 생성기")
-st.caption("블로그 선택 → 주제/URL 입력 → 글 생성(TXT/HTML/복사) → 이미지/발행 → 카피라이트(하단 고정)")
+st.caption("블로그 선택 → 주제/URL 입력 → 글 생성(TXT/HTML/복사) → 이미지/발행 (카피라이트는 최하단 고정)")
 
 left, right = st.columns([1.05, 1.0], gap="large")
 
 with left:
     with st.container(border=True):
         st.subheader("1) 블로그 선택")
-        platform = st.radio("플랫폼", ["네이버(네이버 SEO)", "티스토리(다음/카카오 SEO)", "블로거(구글 SEO)"], horizontal=True)
+        platform = st.radio(
+            "플랫폼",
+            ["네이버(네이버 SEO)", "티스토리(다음/카카오 SEO)", "블로거(구글 SEO)"],
+            horizontal=True,
+        )
 
     with st.container(border=True):
         st.subheader("2) 주제 입력")
@@ -280,9 +302,10 @@ with left:
         reviews_text = st.text_area("후기 텍스트(있으면 붙여넣기)", height=120)
 
 with right:
+    # STEP 4
     with st.container(border=True):
         st.subheader("4) 글 생성")
-        st.write(f"플랫폼: **{platform}**  ·  유형: **{post_type}**  ·  날짜: **{today_yyyymmdd()}**")
+        st.write(f"플랫폼: **{platform}** · 유형: **{post_type}** · 날짜: **{today_yyyymmdd()}**")
 
         if st.button("✨ 글 생성하기", type="primary", use_container_width=True):
             if not topic_text.strip():
@@ -296,5 +319,96 @@ with right:
                     platform=platform,
                     product_name=topic_text.strip(),
                     primary_kw=primary_kw,
-                    보여요?
-::contentReference[oaicite:0]{index=0}
+                    keywords=keywords,
+                    user_notes=notes.strip(),
+                    product_url=product_url.strip(),
+                    size_spec_text=size_spec_text.strip(),
+                    reviews_text=reviews_text.strip(),
+                )
+            else:
+                prompt = build_general_prompt(
+                    platform=platform,
+                    topic=topic_text.strip(),
+                    keywords=keywords,
+                    notes=notes.strip(),
+                )
+
+            out_text = call_openai(prompt)
+            out_text = normalize_spaces(out_text)
+
+            # 해시태그 30개 보정
+            if post_type == "미샵 패션 아이템 글":
+                required = ["#미샵", "#여성의류", "#출근룩", "#데일리룩", "#ootd", "#40대여성의류", "#50대여성의류", "#중년여성패션"]
+            else:
+                required = []
+
+            extra = ["#" + re.sub(r"\s+", "", k) for k in keywords[:25]]
+            tags = ensure_30_hashtags(required, extra)
+
+            # 기존 해시태그 덩어리 제거 후 재부착
+            out_text = re.sub(r"(#\S+\s*){8,}$", "", out_text, flags=re.MULTILINE).rstrip()
+            out_text = out_text + "\n\n" + " ".join(tags)
+
+            title_guess = out_text.splitlines()[0].strip() if out_text.splitlines() else topic_text.strip()
+
+            st.session_state["generated_text"] = out_text
+            st.session_state["generated_title"] = title_guess
+            st.success("생성 완료! 아래 5)에서 복사/다운로드 하세요.")
+
+    # STEP 5 (항상 표시)
+    with st.container(border=True):
+        st.subheader("5) 결과 / TXT·HTML / 복사")
+        if "generated_text" not in st.session_state:
+            st.info("아직 생성된 글이 없습니다. 위에서 **4) 글 생성하기**를 눌러주세요.")
+        else:
+            title_guess = st.session_state.get("generated_title", "미샵 블로그 글")
+            content_text = st.session_state["generated_text"]
+
+            st.text_input("제목(자동)", value=title_guess, disabled=True)
+
+            st.text_area("본문(전체 선택 → 복사)", value=content_text, height=280)
+
+            html_doc = html_wrap(title_guess, content_text)
+            st.subheader("HTML 소스(블로그 HTML 붙여넣기용)")
+            st.code(html_doc, language="html")
+
+            fname = f"{today_yyyymmdd()}_{safe_slug_10chars(title_guess)}.txt"
+            st.download_button(
+                "⬇️ TXT 다운로드",
+                data=content_text,
+                file_name=fname,
+                mime="text/plain",
+                use_container_width=True,
+            )
+
+    # STEP 6
+    with st.container(border=True):
+        st.subheader("6) 이미지 생성 / 발행 바로가기")
+        st.link_button("🖼️ misharp-image-crop-v1 열기", "https://misharp-image-crop-v1.streamlit.app/", use_container_width=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.link_button("Pexels (무료)", "https://www.pexels.com/ko-kr/", use_container_width=True)
+        with c2:
+            st.link_button("Pixabay (무료)", "https://pixabay.com/ko/", use_container_width=True)
+
+        b1, b2, b3 = st.columns(3)
+        with b1:
+            st.link_button("네이버 블로그 로그인", "https://nid.naver.com/nidlogin.login", use_container_width=True)
+        with b2:
+            st.link_button("티스토리 로그인", "https://www.tistory.com/auth/login", use_container_width=True)
+        with b3:
+            st.link_button("Blogger 로그인", "https://accounts.google.com/signin/v2/identifier?service=blogger", use_container_width=True)
+
+
+# Footer: 항상 최하단, 작게
+st.markdown(
+    """
+    <div class="misharp-footer">
+        ⓒ 미샵컴퍼니(MISHARP COMPANY). 본 콘텐츠의 저작권은 미샵컴퍼니에 있으며,
+        무단 복제·배포·전재·2차 가공 및 상업적 이용을 금합니다.<br/>
+        ⓒ MISHARP COMPANY. All rights reserved. Unauthorized copying, redistribution,
+        republication, modification, or commercial use is strictly prohibited.
+    </div>
+    """,
+    unsafe_allow_html=True
+)
