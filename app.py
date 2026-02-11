@@ -63,7 +63,6 @@ def split_title_and_body(generated: str, fallback_title: str) -> Tuple[str, str]
 
     lines = txt.splitlines()
 
-    # 첫 유효 라인 = 제목
     title_idx = None
     for i, ln in enumerate(lines):
         if ln.strip():
@@ -82,7 +81,6 @@ def split_title_and_body(generated: str, fallback_title: str) -> Tuple[str, str]
 
 
 def fix_url_spacing(url: str) -> str:
-    # "https: //..." 같은 실수 보정
     u = (url or "").strip()
     u = re.sub(r"https:\s*//", "https://", u)
     u = re.sub(r"http:\s*//", "http://", u)
@@ -108,13 +106,11 @@ def ensure_hashtags_30(required: List[str], keywords: List[str]) -> str:
     for t in required:
         add(t)
 
-    # 키워드 기반 태그
     for k in keywords:
         k2 = re.sub(r"\s+", "", k)
         if k2:
             add("#" + k2)
 
-    # 부족분 채우기(미샵 기본)
     filler = [
         "#겨울코디", "#봄코디", "#간절기코디", "#오피스룩", "#하객룩", "#학교상담룩",
         "#체형커버", "#데일리패션", "#중년코디", "#미시룩", "#심플룩", "#꾸안꾸",
@@ -129,48 +125,57 @@ def ensure_hashtags_30(required: List[str], keywords: List[str]) -> str:
     return " ".join(base[:30])
 
 
-def html_wrap(title: str, body_text: str) -> str:
-    lines = (body_text or "").splitlines()
-    html_lines = []
-    in_ul = False
+def ensure_markdown_tables(text: str) -> str:
+    """
+    모델이 표를 텍스트로 뭉개서 주는 경우를 일부 보정.
+    (완전한 파서까지는 과하지만, 흔한 케이스를 커버)
+    """
+    t = text or ""
 
-    for line in lines:
-        l = line.rstrip()
+    # 케이스: "어깨단면: 50 | 가슴둘레: 117 | ..." -> 2열 표로 변환
+    m = re.search(r"아이템 사이즈 스펙.*?\n(.*?:\s*\d+.*\|.*)", t, flags=re.DOTALL)
+    # 위 패턴이 애매해서, 그냥 본문 전체에서 "xxx: 값 | yyy: 값" 라인들만 감지
+    lines = t.splitlines()
+    out = []
+    for ln in lines:
+        if "|" in ln and re.search(r"[가-힣A-Za-z]+\s*:\s*[^|]+", ln):
+            parts = [p.strip() for p in ln.split("|") if p.strip()]
+            # 2열 표(항목/값)로 바꿔붙이기
+            rows = []
+            ok = True
+            for p in parts:
+                mm = re.match(r"^(.+?)\s*:\s*(.+)$", p)
+                if not mm:
+                    ok = False
+                    break
+                rows.append((mm.group(1).strip(), mm.group(2).strip()))
+            if ok and len(rows) >= 2:
+                tbl = ["| 항목 | 값 |", "|---|---|"]
+                for a, b in rows:
+                    tbl.append(f"| {a} | {b} |")
+                out.extend(tbl)
+                continue
+        out.append(ln)
+    return "\n".join(out)
 
-        # 리스트 라인 처리
-        if re.match(r"^\s*[-•]\s+", l):
-            if not in_ul:
-                html_lines.append("<ul>")
-                in_ul = True
-            item = re.sub(r"^\s*[-•]\s+", "", l)
-            html_lines.append(f"<li>{html.escape(item)}</li>")
-            continue
-        else:
-            if in_ul:
-                html_lines.append("</ul>")
-                in_ul = False
 
-        if l.strip() == "":
-            html_lines.append("<br/>")
-        else:
-            # 짧은 라인 = 소제목 처리
-            if len(l) <= 34 and not l.endswith(("요", "다", ".", "!", "?", ")")):
-                html_lines.append(f"<h3>{html.escape(l)}</h3>")
-            else:
-                html_lines.append(f"<p>{html.escape(l)}</p>")
-
-    if in_ul:
-        html_lines.append("</ul>")
-
+def markdown_to_simple_html(md_text: str) -> str:
+    """
+    복사용은 마크다운이 메인.
+    HTML 다운로드는 '간단 래핑'만 제공(완전 변환은 지양).
+    """
+    escaped = html.escape(md_text or "")
     return f"""<!doctype html>
 <html lang="ko">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>{html.escape(title)}</title>
+<title>미샵 블로그 글</title>
 </head>
 <body>
-{''.join(html_lines)}
+<pre style="white-space:pre-wrap; font-family:system-ui, -apple-system, Segoe UI, Roboto, Apple SD Gothic Neo, Noto Sans KR, sans-serif;">
+{escaped}
+</pre>
 </body>
 </html>
 """
@@ -183,8 +188,7 @@ def get_openai_client() -> Tuple[Optional["OpenAI"], str, str]:
     api_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip() if hasattr(st, "secrets") else ""
     model = str(st.secrets.get("OPENAI_MODEL", "gpt-4.1-mini")).strip() if hasattr(st, "secrets") else "gpt-4.1-mini"
 
-    # 키에 비ASCII가 섞이면 httpx 헤더에서 UnicodeEncodeError 날 수 있음
-    # (스마트 따옴표/숨은 문자 등)
+    # UnicodeEncodeError 방지(숨은 문자/스마트따옴표 등)
     if any(ord(ch) > 127 for ch in api_key):
         return None, model, "OPENAI_API_KEY에 비ASCII(숨은 문자)가 포함되어 있습니다. Secrets에서 키를 다시 붙여넣어 주세요(일반 쌍따옴표 \")."
 
@@ -202,14 +206,12 @@ def call_openai_text(prompt: str) -> str:
 
 
 def needs_rewrite_to_prose(text: str) -> bool:
-    # 리스트/나열이 과하면 True
     lines = (text or "").splitlines()
     bullet_like = sum(1 for ln in lines if ln.strip().startswith(("-", "•")) or re.match(r"^\s*\d+\)", ln))
     return bullet_like >= 10
 
 
 def rewrite_to_prose(platform: str, product_name: str, text: str) -> str:
-    # 모델이 또 리스트로 작성하면 2차 보정(문장형) - 표/해시태그는 유지
     prompt = f"""
 너는 20년차 여성의류 쇼핑몰 미샵 대표이며, 블로그 글을 ‘문장형 서사’로 고쳐 쓰는 편집자다.
 
@@ -219,20 +221,20 @@ def rewrite_to_prose(platform: str, product_name: str, text: str) -> str:
   1) "이런 분들께 추천합니다"
   2) "이럴 때 요긴해요"
 - 그 외 섹션은 불릿/번호 나열 금지. 반드시 문단(2~4문장)으로 풀어쓴다.
-- 표(사이즈 스펙 표, 사이즈 추천 표)는 표 형태를 유지한다.
+- 표는 반드시 ‘마크다운 표’로 출력한다.
+  (| 컬럼 | 컬럼 | 형태, 헤더/구분선 포함)
 - 마지막 줄 해시태그 30개는 한 줄로 유지한다.
-- 말투: 대중적/캐주얼, 때로 쇼핑호스트/동네 사장님 톤.
 - 플랫폼: {platform}
 - 상품명: {product_name}
 
 [원문]
 {text}
 
-[출력]
+[출력 형식]
 - 1행 제목
 - 빈 줄
-- 본문
-- 마지막 줄 해시태그 30개
+- 본문(마크다운)
+- 맨 마지막 줄 해시태그 30개
 """.strip()
     out = call_openai_text(prompt)
     return out
@@ -285,7 +287,7 @@ def build_misharp_prompt_narrative(
     return f"""
 너는 20년차 여성의류 쇼핑몰 미샵(MISHARP) 대표이며,
 4050 여성 고객을 매일 상담해온 현장형 MD다.
-이 글은 상품 설명서가 아니라 ‘블로그 상담 글’이다.
+이 글은 ‘마크다운으로 쓰는 블로그 상담 글’이다.
 
 {platform_profile(platform)}
 
@@ -300,7 +302,16 @@ def build_misharp_prompt_narrative(
 7) 마지막 줄: “일상도 스타일도 미샵처럼, 심플하게! MISHARP”
 8) 해시태그 30개는 맨 끝 한 줄.
 
-[가장 중요한 문장형 규칙]
+[마크다운 출력 규칙(중요)]
+- 본문 전체는 마크다운으로 작성한다.
+- 표 2개(사이즈 스펙/사이즈 추천)는 반드시 ‘마크다운 표’로 출력한다:
+  예)
+  | 항목 | 값 |
+  |---|---|
+  | 어깨단면 | 50 |
+- 표 이외에는 마크다운 리스트를 과도하게 쓰지 말 것.
+
+[문장형 규칙]
 - 리스트(불릿)는 오직 2개 섹션에서만 허용:
   A) 이런 분들께 추천합니다
   B) 이럴 때 요긴해요
@@ -326,10 +337,10 @@ def build_misharp_prompt_narrative(
 7) (자연스러운 제목) 하루가 편해지는 이유(소재/착용감: 문장형 2~3문단)
 8) (자연스러운 제목) 결국 손이 가는 옷의 조건(가치/가격: 문장형 1~2문단)
 9) 고객 후기 반응 요약(조건): {reviews_rule}
-10) 활용성/코디 제안(TPO 연결: 문장형 2~3문단, 예시 3~4개는 문장 속에 녹여라)
+10) 활용성/코디 제안(TPO 연결: 문장형 2~3문단)
 11) (자연스러운 제목) 이 아이템, 꼭 만나보세요(공감 CTA: 문장형 1문단)
-12) 아이템 사이즈 스펙 표(표 1개)
-13) 사이즈 추천 표(표 1개)
+12) 아이템 사이즈 스펙 표(마크다운 표 1개)
+13) 사이즈 추천 표(마크다운 표 1개)
 14) 최하단 요약 3줄(문장형)
 15) 인용박스(>) CTA 2~3줄
 16) 슬로건 + 해시태그 30개(한 줄)
@@ -351,7 +362,7 @@ def build_misharp_prompt_narrative(
 [출력 형식(강제)]
 - 1행: 제목만(“제목:” 접두어 금지)
 - 2행: 빈 줄
-- 3행부터: 본문
+- 3행부터: 본문(마크다운)
 - 맨 마지막 줄: 해시태그 30개 한 줄
 """.strip()
 
@@ -362,6 +373,7 @@ def build_general_prompt(platform: str, topic: str, keywords: List[str], notes: 
 너는 {platform} SEO에 최적화된 블로그 글을 쓰는 전문가다.
 분량: 약 4,000~5,000자.
 키워드({kws_joined})는 억지 반복 금지, 자연스럽게 분산.
+출력은 마크다운으로 한다(표가 필요하면 마크다운 표 사용).
 
 {platform_profile(platform)}
 
@@ -382,7 +394,7 @@ def build_general_prompt(platform: str, topic: str, keywords: List[str], notes: 
 [출력 형식]
 - 1행: 제목만(접두어 금지)
 - 2행: 빈 줄
-- 3행부터: 본문
+- 3행부터: 본문(마크다운)
 - 맨 마지막 줄: 해시태그 30개 한 줄
 """.strip()
 
@@ -432,13 +444,10 @@ st.markdown(
 )
 
 st.title("📝 미샵 블로그글 생성기")
-st.markdown('<div class="subcap">블로그 선택 → 주제 입력 → 글 생성(TXT/HTML/복사) → 이미지/발행</div>', unsafe_allow_html=True)
+st.markdown('<div class="subcap">블로그 선택 → 주제 입력 → 글 생성(마크다운 표 지원) → 이미지/발행</div>', unsafe_allow_html=True)
 
 left, right = st.columns([1.05, 1.0], gap="large")
 
-# -------------------------
-# Left: Steps 1~2
-# -------------------------
 with left:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<div class="step-title">1) 블로그 선택</div>', unsafe_allow_html=True)
@@ -465,7 +474,6 @@ with left:
 
     notes = st.text_area("내용 입력(상세설명/원고/메모)", height=220)
 
-    # 미샵 글일 때만 표시 (원래 구조 유지)
     if post_type == "미샵 패션 아이템 글":
         with st.expander("추가 입력(선택): 사이즈/후기", expanded=False):
             size_spec_text = st.text_area("사이즈 스펙(표 재료)", height=120)
@@ -476,13 +484,10 @@ with left:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-# -------------------------
-# Right: Steps 3~6
-# -------------------------
 with right:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<div class="step-title">3) 글 생성</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hint">생성 후 5)에서 TXT/HTML/복사 가능합니다.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hint">생성 후 5)에서 “미리보기(표 렌더)” + “복사용 원문(마크다운)”을 제공합니다.</div>', unsafe_allow_html=True)
 
     enhance_prose = st.checkbox("문장형 강화(자동 보정)", value=True)
 
@@ -515,14 +520,12 @@ with right:
         raw = call_openai_text(prompt)
         raw = normalize_spaces(raw)
 
-        # (중요) 미샵 글인데도 리스트가 너무 많으면 2차 재작성
         if enhance_prose and post_type == "미샵 패션 아이템 글" and needs_rewrite_to_prose(raw):
             raw = rewrite_to_prose(platform, topic_text.strip(), raw)
             raw = normalize_spaces(raw)
 
         title_guess, body = split_title_and_body(raw, fallback_title=topic_text.strip())
 
-        # 해시태그 30개 보정
         if post_type == "미샵 패션 아이템 글":
             required = ["#미샵", "#여성의류", "#출근룩", "#데일리룩", "#ootd", "#40대여성의류", "#50대여성의류", "#중년여성패션"]
         else:
@@ -530,47 +533,69 @@ with right:
 
         tags_line = ensure_hashtags_30(required, keywords)
 
-        # 본문 끝에 해시태그가 이미 있더라도 마지막 줄은 통일
         body = re.sub(r"(#\S+\s*){8,}$", "", body, flags=re.MULTILINE).rstrip()
-        full_text = (title_guess + "\n\n" + body).strip() + "\n\n" + tags_line
+        full_md = (title_guess + "\n\n" + body).strip() + "\n\n" + tags_line
+
+        # 표 형태 보정(일부 케이스)
+        full_md = ensure_markdown_tables(full_md)
 
         st.session_state["generated_title"] = title_guess
-        st.session_state["generated_text"] = full_text
-        st.success("생성 완료! 아래 5)에서 확인/다운로드 하세요.")
+        st.session_state["generated_md"] = full_md
+        st.success("생성 완료! 아래 5)에서 복사/다운로드 하세요.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Step 5: 항상 표시 (예전처럼 “비어있음” 방지)
+    # 5) 결과: ChatGPT처럼 "렌더링 + 원문" 제공
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="step-title">4) 결과 / TXT · HTML / 복사</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-title">5) 결과 / 복사 / 다운로드</div>', unsafe_allow_html=True)
 
-    if "generated_text" not in st.session_state:
+    if "generated_md" not in st.session_state:
         st.info("아직 생성된 글이 없습니다. 위에서 **3) 글 생성하기**를 눌러주세요.")
     else:
         title_guess = st.session_state.get("generated_title", "미샵 블로그 글")
-        content_text = st.session_state["generated_text"]
+        md_text = st.session_state["generated_md"]
 
-        st.text_input("제목(자동)", value=title_guess, disabled=True)
-        st.text_area("본문(전체 선택 → 복사)", value=content_text, height=340)
+        tab1, tab2, tab3 = st.tabs(["미리보기(표 그대로)", "복사용 원문(마크다운)", "다운로드/HTML"])
 
-        html_doc = html_wrap(title_guess, content_text)
-        st.markdown("**HTML 소스(블로그 HTML 붙여넣기용)**")
-        st.code(html_doc, language="html")
+        with tab1:
+            st.markdown(md_text)
 
-        fname = f"{today_yyyymmdd()}_{safe_slug_10chars(title_guess)}.txt"
-        st.download_button(
-            "⬇️ TXT 다운로드",
-            data=content_text,
-            file_name=fname,
-            mime="text/plain",
-            use_container_width=True,
-        )
+        with tab2:
+            st.text_area("여기 내용을 그대로 복사해서 사용하세요(표 포함)", value=md_text, height=420)
+
+        with tab3:
+            fname_base = f"{today_yyyymmdd()}_{safe_slug_10chars(title_guess)}"
+            st.download_button(
+                "⬇️ MD 다운로드(표 유지 추천)",
+                data=md_text,
+                file_name=f"{fname_base}.md",
+                mime="text/markdown",
+                use_container_width=True,
+            )
+            st.download_button(
+                "⬇️ TXT 다운로드",
+                data=md_text,
+                file_name=f"{fname_base}.txt",
+                mime="text/plain",
+                use_container_width=True,
+            )
+
+            html_doc = markdown_to_simple_html(md_text)
+            st.markdown("**HTML(간단 래핑) — 필요 시 사용**")
+            st.code(html_doc, language="html")
+            st.download_button(
+                "⬇️ HTML 다운로드",
+                data=html_doc,
+                file_name=f"{fname_base}.html",
+                mime="text/html",
+                use_container_width=True,
+            )
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Step 3/4: 이미지/발행 링크 (목업 유지)
+    # 3) 이미지 생성
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="step-title">5) 이미지 생성</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-title">3) 이미지 생성</div>', unsafe_allow_html=True)
     st.link_button("🖼️ 미샵 상세페이지 이미지 추출기(자동 ZIP)", "https://misharp-image-crop-v1.streamlit.app/", use_container_width=True)
 
     c1, c2 = st.columns(2)
@@ -578,12 +603,11 @@ with right:
         st.link_button("Pexels (무료)", "https://www.pexels.com/ko-kr/", use_container_width=True)
     with c2:
         st.link_button("Pixabay (무료)", "https://pixabay.com/ko/", use_container_width=True)
-
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # 4) 발행하기
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="step-title">6) 발행하기</div>', unsafe_allow_html=True)
-
+    st.markdown('<div class="step-title">4) 발행하기</div>', unsafe_allow_html=True)
     b1, b2, b3 = st.columns(3)
     with b1:
         st.link_button("네이버 블로그 로그인", "https://nid.naver.com/nidlogin.login", use_container_width=True)
@@ -591,10 +615,9 @@ with right:
         st.link_button("티스토리 로그인", "https://www.tistory.com/auth/login", use_container_width=True)
     with b3:
         st.link_button("Blogger 로그인", "https://accounts.google.com/signin/v2/identifier?service=blogger", use_container_width=True)
-
     st.markdown("</div>", unsafe_allow_html=True)
 
-# Footer: 카피라이트(항상 최하단, 작게)
+# Footer
 st.markdown(
     """
 <div class="footer">
