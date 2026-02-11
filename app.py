@@ -8,16 +8,15 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 
-# Optional: OpenAI
 try:
     from openai import OpenAI
 except Exception:
     OpenAI = None
 
 
-# =========================
-# Helpers
-# =========================
+# -------------------------
+# Utilities
+# -------------------------
 def today_yyyymmdd() -> str:
     return datetime.now().strftime("%Y%m%d")
 
@@ -87,8 +86,8 @@ def ensure_30_hashtags(base: List[str], extra: List[str]) -> List[str]:
     return out[:30]
 
 
-def html_wrap(title: str, body_md_like: str) -> str:
-    lines = body_md_like.splitlines()
+def html_wrap(title: str, body_text: str) -> str:
+    lines = body_text.splitlines()
     html_lines = []
     in_ul = False
 
@@ -108,13 +107,6 @@ def html_wrap(title: str, body_md_like: str) -> str:
 
         if l.strip() == "":
             html_lines.append("<br/>")
-        elif re.match(r"^#{1,6}\s+", l):
-            level = len(l.split(" ")[0])
-            txt = l[level+1:].strip()
-            level = min(max(level, 2), 4)
-            html_lines.append(f"<h{level}>{html.escape(txt)}</h{level}>")
-        elif l.startswith(">"):
-            html_lines.append(f"<blockquote>{html.escape(l[1:].strip())}</blockquote>")
         else:
             html_lines.append(f"<p>{html.escape(l)}</p>")
 
@@ -135,43 +127,27 @@ def html_wrap(title: str, body_md_like: str) -> str:
 """
 
 
-@dataclass
-class ProductInfo:
-    name: str = ""
-    price: str = ""
-    url: str = ""
-    description_hint: str = ""
+# -------------------------
+# OpenAI
+# -------------------------
+def call_openai(prompt: str) -> str:
+    api_key = st.secrets.get("OPENAI_API_KEY", "") if hasattr(st, "secrets") else ""
+    model = st.secrets.get("OPENAI_MODEL", "gpt-5") if hasattr(st, "secrets") else "gpt-5"
+
+    api_key = str(api_key).strip()
+    model = str(model).strip()
+
+    if not api_key or OpenAI is None:
+        return "(테스트 모드) OpenAI 키가 없어 규칙 기반 임시 출력입니다.\n\n" + prompt[:1800]
+
+    client = OpenAI(api_key=api_key)
+    resp = client.responses.create(model=model, input=prompt)
+    return resp.output_text
 
 
-def try_fetch_misharp_product(url: str, timeout: int = 10) -> ProductInfo:
-    info = ProductInfo(url=url)
-    if not url.strip():
-        return info
-    try:
-        r = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "lxml")
-
-        title = (soup.title.get_text(strip=True) if soup.title else "").strip()
-        if title:
-            title = re.sub(r"\s*-\s*미샵.*$", "", title).strip()
-            info.name = title[:60]
-
-        og = soup.find("meta", property="og:title")
-        if og and og.get("content"):
-            info.name = og["content"].strip()[:60]
-
-        text = soup.get_text(" ", strip=True)
-        m = re.search(r"(\d{1,3}(?:,\d{3})+)\s*원", text)
-        if m:
-            info.price = m.group(1) + "원"
-
-        info.description_hint = text[:800]
-    except Exception:
-        pass
-    return info
-
-
+# -------------------------
+# Prompts
+# -------------------------
 def build_misharp_prompt(platform: str, product_name: str, primary_kw: str, keywords: List[str],
                         user_notes: str, product_url: str, size_spec_text: str, reviews_text: str) -> str:
     kws_joined = ", ".join(keywords) if keywords else ""
@@ -211,7 +187,7 @@ def build_misharp_prompt(platform: str, product_name: str, primary_kw: str, keyw
 [입력 정보]
 - 상품명: {product_name}
 - 상품 URL: {product_url}
-- 핵심 키워드(우선순위): {kws_joined}
+- 핵심 키워드: {kws_joined}
 - 사용자 추가 메모/원고:
 {user_notes}
 
@@ -256,61 +232,25 @@ def build_general_prompt(platform: str, topic: str, keywords: List[str], notes: 
 """.strip()
 
 
-# ✅ 핵심: API KEY 검사/경고 (UnicodeEncodeError 방지)
-def _clean_invisible(s: str) -> str:
-    # 제로폭/보이지 않는 문자 제거
-    return re.sub(r"[\u200b\u200c\u200d\ufeff]", "", s)
-
-
-def _is_ascii(s: str) -> bool:
-    try:
-        s.encode("ascii")
-        return True
-    except UnicodeEncodeError:
-        return False
-
-
-def call_openai(prompt: str) -> str:
-    api_key = st.secrets.get("OPENAI_API_KEY", "") if hasattr(st, "secrets") else ""
-    model = st.secrets.get("OPENAI_MODEL", "gpt-5") if hasattr(st, "secrets") else "gpt-5"
-
-    api_key = _clean_invisible(str(api_key)).strip()
-    model = str(model).strip()
-
-    if not api_key or OpenAI is None:
-        return "(테스트 모드) OpenAI 키가 없어 규칙 기반 임시 출력입니다.\n\n" + prompt[:1800]
-
-    # ❗ 여기서 잡아주면 Streamlit이 크래시 안 납니다
-    if not _is_ascii(api_key):
-        st.error(
-            "OPENAI_API_KEY에 비ASCII(스마트따옴표/한글/숨은문자)가 섞여 있어요.\n"
-            "Streamlit → Manage app → Settings → Secrets에서 키를 다시 붙여넣어 주세요.\n\n"
-            "✅ 팁: 메모장(plain text)에 한 번 붙여넣고 다시 복사해서 넣으면 대부분 해결됩니다."
-        )
-        st.stop()
-
-    # 흔한 실수: 키 앞뒤에 따옴표가 포함된 경우(문자 자체가 들어가면 인증 실패)
-    if api_key.startswith(("'", '"')) or api_key.endswith(("'", '"')):
-        st.warning("OPENAI_API_KEY 값에 따옴표가 포함된 것 같아요. 따옴표 없이 키만 넣어주세요.")
-        st.stop()
-
-    try:
-        client = OpenAI(api_key=api_key)
-        resp = client.responses.create(model=model, input=prompt)
-        return resp.output_text
-    except Exception as e:
-        st.error("OpenAI 호출 중 오류가 발생했습니다. Secrets의 키/모델 값을 확인해주세요.")
-        st.caption(str(e))
-        st.stop()
-
-
 # =========================
-# Page / UI (간단 유지)
+# UI
 # =========================
 st.set_page_config(page_title="미샵 블로그 콘텐츠 생성기", page_icon="📝", layout="wide")
 
+# 기본 스타일(가벼운 정돈)
+st.markdown(
+    """
+    <style>
+    .block-container { padding-top: 2.2rem; padding-bottom: 2.8rem; }
+    h1 { font-size: 2.2rem !important; }
+    .step-badge { font-size: 0.75rem; opacity: 0.85; }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 st.title("📝 미샵 블로그 콘텐츠 생성기")
-st.caption("블로그 선택 → 주제/URL 입력 → 글 생성(TXT/HTML/복사) → 이미지/발행 → 카피라이트")
+st.caption("블로그 선택 → 주제/URL 입력 → 글 생성(TXT/HTML/복사) → 이미지/발행 → 카피라이트(하단 고정)")
 
 left, right = st.columns([1.05, 1.0], gap="large")
 
@@ -322,6 +262,7 @@ with left:
     with st.container(border=True):
         st.subheader("2) 주제 입력")
         post_type = st.selectbox("글 유형", ["미샵 패션 아이템 글", "기타 주제 글"])
+
         c1, c2 = st.columns([1, 1], gap="small")
         with c1:
             product_url = st.text_input("상품 URL (선택)", placeholder="https://misharp.co.kr/product/detail.html?product_no=...")
@@ -343,19 +284,6 @@ with right:
         st.subheader("4) 글 생성")
         st.write(f"플랫폼: **{platform}**  ·  유형: **{post_type}**  ·  날짜: **{today_yyyymmdd()}**")
 
-        if st.button("🔎 (선택) URL에서 상품명 자동 추출", use_container_width=True):
-            if product_url.strip():
-                info = try_fetch_misharp_product(product_url.strip())
-                if info.name:
-                    st.success(f"추출된 상품명: {info.name}")
-                    if not topic_text.strip():
-                        st.session_state["topic_autofill"] = info.name
-                else:
-                    st.warning("자동 추출 실패. 주제/상품명은 직접 입력이 가장 안전합니다.")
-
-        if "topic_autofill" in st.session_state and not topic_text.strip():
-            topic_text = st.session_state["topic_autofill"]
-
         if st.button("✨ 글 생성하기", type="primary", use_container_width=True):
             if not topic_text.strip():
                 st.error("주제/상품명(필수)을 입력해주세요.")
@@ -368,80 +296,5 @@ with right:
                     platform=platform,
                     product_name=topic_text.strip(),
                     primary_kw=primary_kw,
-                    keywords=keywords,
-                    user_notes=notes.strip(),
-                    product_url=product_url.strip(),
-                    size_spec_text=size_spec_text.strip(),
-                    reviews_text=reviews_text.strip(),
-                )
-            else:
-                prompt = build_general_prompt(
-                    platform=platform,
-                    topic=topic_text.strip(),
-                    keywords=keywords,
-                    notes=notes.strip(),
-                )
-
-            out_text = call_openai(prompt)
-            out_text = normalize_spaces(out_text)
-
-            if post_type == "미샵 패션 아이템 글":
-                required = ["#미샵", "#여성의류", "#출근룩", "#데일리룩", "#ootd", "#40대여성의류", "#50대여성의류", "#중년여성패션"]
-            else:
-                required = []
-
-            extra = ["#" + re.sub(r"\s+", "", k) for k in keywords[:25]]
-            tags = ensure_30_hashtags(required, extra)
-
-            out_text_wo_tags = re.sub(r"(#\S+\s*){8,}$", "", out_text, flags=re.MULTILINE).rstrip()
-            out_text = out_text_wo_tags + "\n\n" + " ".join(tags)
-
-            title_guess = out_text.splitlines()[0].strip() if out_text.splitlines() else topic_text.strip()
-
-            st.session_state["generated_text"] = out_text
-            st.session_state["generated_title"] = title_guess
-            st.session_state["copyright_kr"] = (
-                "ⓒ 미샵컴퍼니(MISHARP COMPANY). 본 콘텐츠의 저작권은 미샵컴퍼니에 있으며, "
-                "무단 복제·배포·전재·2차 가공 및 상업적 이용을 금합니다."
-            )
-            st.session_state["copyright_en"] = (
-                "ⓒ MISHARP COMPANY. All rights reserved. Unauthorized copying, redistribution, "
-                "republication, modification, or commercial use is strictly prohibited."
-            )
-
-            st.success("생성 완료!")
-
-        if "generated_text" in st.session_state:
-            title_guess = st.session_state["generated_title"]
-            content_text = st.session_state["generated_text"]
-
-            st.subheader("✅ 결과 (텍스트)")
-            st.text_area("생성된 글(복사용)", value=content_text, height=340)
-
-            html_doc = html_wrap(title_guess, content_text)
-            st.subheader("✅ HTML 소스")
-            st.code(html_doc, language="html")
-
-            fname = f"{today_yyyymmdd()}_{safe_slug_10chars(title_guess)}.txt"
-            st.download_button("⬇️ TXT 다운로드", data=content_text, file_name=fname, mime="text/plain", use_container_width=True)
-
-            st.subheader("카피라이트")
-            st.write(st.session_state["copyright_kr"])
-            st.write(st.session_state["copyright_en"])
-
-    with st.container(border=True):
-        st.subheader("6) 이미지 생성 / 발행 바로가기")
-        st.link_button("🖼️ misharp-image-crop-v1 열기", "https://misharp-image-crop-v1.streamlit.app/", use_container_width=True)
-        c1, c2 = st.columns(2)
-        with c1:
-            st.link_button("Pexels (무료)", "https://www.pexels.com/ko-kr/", use_container_width=True)
-        with c2:
-            st.link_button("Pixabay (무료)", "https://pixabay.com/ko/", use_container_width=True)
-
-        b1, b2, b3 = st.columns(3)
-        with b1:
-            st.link_button("네이버 블로그 로그인", "https://nid.naver.com/nidlogin.login", use_container_width=True)
-        with b2:
-            st.link_button("티스토리 로그인", "https://www.tistory.com/auth/login", use_container_width=True)
-        with b3:
-            st.link_button("Blogger 로그인", "https://accounts.google.com/signin/v2/identifier?service=blogger", use_container_width=True)
+                    보여요?
+::contentReference[oaicite:0]{index=0}
