@@ -547,7 +547,7 @@ with right:
 
     # 4) 결과: ChatGPT처럼 "렌더링 + 원문" 제공
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="step-title">5) 결과 / 복사 / 다운로드</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-title">4) 결과 / 복사 / 다운로드</div>', unsafe_allow_html=True)
 
     if "generated_md" not in st.session_state:
         st.info("아직 생성된 글이 없습니다. 위에서 **3) 글 생성하기**를 눌러주세요.")
@@ -595,7 +595,7 @@ with right:
 
     # 5) 이미지 생성
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="step-title">3) 이미지 생성</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-title">5) 이미지 생성</div>', unsafe_allow_html=True)
     st.link_button("🖼️ 미샵 상세페이지 이미지 추출기(자동 ZIP)", "https://misharp-image-crop-v1.streamlit.app/", use_container_width=True)
 
     c1, c2 = st.columns(2)
@@ -607,7 +607,7 @@ with right:
 
     # 6) 발행하기
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="step-title">4) 발행하기</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-title">6) 발행하기</div>', unsafe_allow_html=True)
     b1, b2, b3 = st.columns(3)
     with b1:
         st.link_button("네이버 블로그 로그인", "https://nid.naver.com/nidlogin.login", use_container_width=True)
