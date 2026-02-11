@@ -487,7 +487,7 @@ with left:
 with right:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<div class="step-title">3) 글 생성</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hint">생성 후 5)에서 “미리보기(표 렌더)” + “복사용 원문(마크다운)”을 제공합니다.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hint">생성 후 4)에서 “미리보기(표 렌더)” + “복사용 원문(마크다운)”을 제공합니다.</div>', unsafe_allow_html=True)
 
     enhance_prose = st.checkbox("문장형 강화(자동 보정)", value=True)
 
@@ -545,7 +545,7 @@ with right:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # 5) 결과: ChatGPT처럼 "렌더링 + 원문" 제공
+    # 4) 결과: ChatGPT처럼 "렌더링 + 원문" 제공
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<div class="step-title">5) 결과 / 복사 / 다운로드</div>', unsafe_allow_html=True)
 
@@ -593,7 +593,7 @@ with right:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # 3) 이미지 생성
+    # 5) 이미지 생성
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<div class="step-title">3) 이미지 생성</div>', unsafe_allow_html=True)
     st.link_button("🖼️ 미샵 상세페이지 이미지 추출기(자동 ZIP)", "https://misharp-image-crop-v1.streamlit.app/", use_container_width=True)
@@ -605,7 +605,7 @@ with right:
         st.link_button("Pixabay (무료)", "https://pixabay.com/ko/", use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # 4) 발행하기
+    # 6) 발행하기
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<div class="step-title">4) 발행하기</div>', unsafe_allow_html=True)
     b1, b2, b3 = st.columns(3)
