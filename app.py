@@ -569,7 +569,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("📝 미샵 블로그 콘텐츠 생성기")
+title_col, reset_col = st.columns([0.82, 0.18])
+with title_col:
+    st.title("📝 미샵 블로그 콘텐츠 생성기")
+with reset_col:
+    st.write("")
+    st.write("")
+    if st.button("🔄 초기화", use_container_width=True):
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+        st.rerun()
+
 st.markdown(
     '<div class="subcap">블로그 선택 → 주제 입력 → 글 생성 → <b>결과(네이버 HTML 복사)</b> → 이미지/발행</div>',
     unsafe_allow_html=True,
