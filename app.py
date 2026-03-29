@@ -703,32 +703,45 @@ with left:
         ["네이버(네이버 SEO)", "티스토리(다음/카카오 SEO)", "블로거(구글 SEO)"],
         horizontal=True,
         label_visibility="collapsed",
+        key="platform",
     )
     st.markdown('<div class="tiny">네이버는 “HTML 복사”로 붙여넣어야 표가 유지됩니다.</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="step-title">2) 주제 입력</div>', unsafe_allow_html=True)
+    top_a, top_b = st.columns([1, 1])
+    with top_a:
+        st.markdown('<div class="step-title">2) 주제 입력</div>', unsafe_allow_html=True)
+    with top_b:
+        if st.button("🔄 초기화", use_container_width=True, key="reset_all_btn"):
+            for k in [
+                "platform", "post_type", "product_url", "topic_text", "kw_csv",
+                "notes", "size_spec_text", "reviews_text",
+                "generated_title", "generated_md", "generated_html"
+            ]:
+                if k in st.session_state:
+                    del st.session_state[k]
+            st.rerun()
 
-    post_type = st.selectbox("글 유형", ["미샵 패션 아이템 글", "기타 주제 글"])
+    post_type = st.selectbox("글 유형", ["미샵 패션 아이템 글", "기타 주제 글"], key="post_type")
 
     c1, c2 = st.columns([1, 1], gap="small")
     with c1:
-        product_url = st.text_input("상품 URL(선택)", placeholder="https://misharp.co.kr/product/detail.html?product_no=...")
+        product_url = st.text_input("상품 URL(선택)", placeholder="https://misharp.co.kr/product/detail.html?product_no=...", key="product_url")
     with c2:
-        topic_text = st.text_input("주제/상품명(필수)", placeholder="예) 트루 피치 체크 셔츠 / 40대 출근룩 코디")
+        topic_text = st.text_input("주제/상품명(필수)", placeholder="예) 트루 피치 체크 셔츠 / 40대 출근룩 코디", key="topic_text")
 
-    kw_csv = st.text_input("키워드(','로 구분)", placeholder="예) 출근룩, 데일리룩, 체형커버, 간절기셔츠, 여성셔츠")
+    kw_csv = st.text_input("키워드(','로 구분)", placeholder="예) 출근룩, 데일리룩, 체형커버, 간절기셔츠, 여성셔츠", key="kw_csv")
     keywords = keywords_from_csv(kw_csv)
 
-    notes = st.text_area("내용 입력(상세설명/원고/메모)", height=220)
+    notes = st.text_area("내용 입력(상세설명/원고/메모)", height=220, key="notes")
 
     size_spec_text = ""
     reviews_text = ""
     if post_type == "미샵 패션 아이템 글":
         with st.expander("추가 입력(선택): 사이즈/후기", expanded=False):
-            size_spec_text = st.text_area("사이즈 스펙(표 재료)", height=120)
-            reviews_text = st.text_area("후기 텍스트(있으면 붙여넣기)", height=120)
+            size_spec_text = st.text_area("사이즈 스펙(표 재료)", height=120, key="size_spec_text")
+            reviews_text = st.text_area("후기 텍스트(있으면 붙여넣기)", height=120, key="reviews_text")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
